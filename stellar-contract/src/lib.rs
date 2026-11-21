@@ -87,6 +87,8 @@ pub mod zkp_verifier;
 pub mod admin;
 /// Transfer workflows: initiate, approve, reject, expire pending transfers.
 pub mod transfer_mgmt;
+/// Charity domain: set_charity_contract, get_charity_contract, donate_to_charity.
+pub mod charity;
 
 // ── Internal test modules (compile-time only) ─────────────────────────────────
 #[cfg(test)]
@@ -158,7 +160,8 @@ const MIN_WEIGHT: Symbol = symbol_short!("MIN_WGT");
 // New feature storage keys
 const CHALLENGE_COUNT: Symbol = symbol_short!("CHAL_CNT");
 const PENDING_XFR_CNT: Symbol = symbol_short!("PXFR_CNT");
-const MILESTONES_KEY: Symbol = symbol_short!("MLSTONES");
+// Note: milestone records are keyed by the string tuple ("milestones", participant)
+// directly in code; no Symbol constant is needed here.
 const AUCTION_COUNT: Symbol = symbol_short!("AUC_CNT");
 
 // Pre-existing missing constants
@@ -612,8 +615,8 @@ impl ScavengerContract {
     ///
     /// # Panics
     /// - Panics with `"Self-transfer is not allowed"` if `from == to`.
-    fn require_addresses_different(from: &Address, to: &Address) {
-        validation::validate_addresses_different(&env, from, to, "Self-transfer is not allowed");
+    fn require_addresses_different(env: &Env, from: &Address, to: &Address) {
+        validation::validate_addresses_different(env, from, to, "Self-transfer is not allowed");
     }
 
     /// Apply a reputation delta to a participant (clamped to [REP_MIN, REP_MAX]).
@@ -1272,7 +1275,7 @@ impl ScavengerContract {
     /// 6. The waste is not frozen
     pub fn validate_transfer_path(env: Env, waste_id: u128, from: Address, to: Address) -> Result<(), Error> {
         Self::require_not_paused(&env);
-        Self::require_addresses_different(&from, &to);
+        Self::require_addresses_different(&env, &from, &to);
 
         let waste: types::Waste = waste_storage::read_waste(&env, waste_id).ok_or(Error::WasteNotFound)?;
 
@@ -1319,7 +1322,7 @@ impl ScavengerContract {
     ) -> Result<WasteTransfer, Error> {
         Self::only_admin(&env, &admin);
         Self::require_not_paused(&env);
-        Self::require_addresses_different(&from, &to);
+        Self::require_addresses_different(&env, &from, &to);
 
         let mut waste: types::Waste = waste_storage::read_waste(&env, waste_id).ok_or(Error::WasteNotFound)?;
 
@@ -2247,7 +2250,7 @@ impl ScavengerContract {
             panic_with_error!(&env, Error::Unauthorized);
         }
 
-        Self::require_addresses_different(&from, &to);
+        Self::require_addresses_different(&env, &from, &to);
 
         // INTENTIONALLY DISABLED (#1152): The v1 `Material` struct does not carry
         // an `is_active` field (that field lives on the v2 `Waste` struct only).
@@ -2628,7 +2631,7 @@ impl ScavengerContract {
         storage_utils::bump_instance(&env);
         from.require_auth();
         Self::require_not_paused(&env);
-        Self::require_addresses_different(&from, &to);
+        Self::require_addresses_different(&env, &from, &to);
 
         // Fetch waste first so we can return a typed error if not found
         let mut waste: types::Waste = match waste_storage::read_waste(&env, waste_id) {
@@ -2749,7 +2752,7 @@ impl ScavengerContract {
             }
             let from = waste.current_owner.clone();
 
-            Self::require_addresses_different(&from, &to);
+            Self::require_addresses_different(&env, &from, &to);
             // Verify caller owns the waste
             Self::only_waste_owner(&env, &from, waste_id);
             Self::require_registered(&env, &from);
@@ -2843,7 +2846,7 @@ impl ScavengerContract {
         notes: soroban_sdk::Symbol,
     ) -> u128 {
         collector.require_auth();
-        Self::require_addresses_different(&collector, &manufacturer);
+        Self::require_addresses_different(&env, &collector, &manufacturer);
         Self::require_not_paused(&env);
         Self::require_registered(&env, &collector);
         Self::require_registered(&env, &manufacturer);
@@ -5747,7 +5750,7 @@ impl ScavengerContract {
         Self::require_not_paused(&env);
         Self::only_registered(&env, &from);
         Self::require_registered(&env, &to);
-        Self::require_addresses_different(&from, &to);
+        Self::require_addresses_different(&env, &from, &to);
 
         let waste: types::Waste =
             waste_storage::read_waste(&env, waste_id).unwrap_or_else(|| panic_with_error!(&env, Error::WasteNotFound));

@@ -50,6 +50,7 @@ pub fn get_or_fail(env: &Env, waste_id: u128) -> Result<Waste, Error> {
 }
 
 /// Removes a `Waste` record from storage.
+#[cfg(test)]
 pub fn delete_waste(env: &Env, waste_id: u128) {
     env.storage().instance().remove(&waste_v2_key(waste_id));
 }
