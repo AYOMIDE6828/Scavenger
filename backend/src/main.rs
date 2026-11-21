@@ -118,7 +118,7 @@ async fn main() -> std::io::Result<()> {
     let allowed_origins = app_config.allowed_origins.clone();
     let container = Arc::new(container);
 
-    HttpServer::new(move || {
+    let srv = HttpServer::new(move || {
         let cors = {
             let mut builder = Cors::default();
             for origin in allowed_origins.split(',').map(str::trim) {
@@ -161,6 +161,10 @@ async fn main() -> std::io::Result<()> {
             //
             // Because actix-web wraps in reverse, RequestIdMiddleware must be
             // registered *last* in the `.wrap()` chain so it executes *first*.
+            // #1721: idempotency key deduplication for all state-changing
+            // (POST/PUT/PATCH/DELETE) endpoints. Clients supply an
+            // `Idempotency-Key` header; duplicate keys within 24 h get
+            // the cached response without re-running the handler.
             .wrap(IdempotencyMiddleware::new())
             .wrap(RateLimitMiddleware::new(rate_limit_config.clone()))
             // #1701: ValidationMiddleware rejects malformed Content-Type /
@@ -367,8 +371,43 @@ async fn main() -> std::io::Result<()> {
             .route("/api/v1/archival/jobs/{id}", web::get().to(archival_api::get_job))
     })
     .bind("0.0.0.0:8080")?
-    .run()
-    .await
+    .run();
+
+    let srv_handle = srv.handle();
+
+    tokio::select! {
+        result = srv => result,
+        _ = shutdown_signal() => {
+            tracing::info!("shutdown signal received, draining connections");
+            srv_handle.stop(true).await;
+            Ok(())
+        }
+    }
+}
+
+/// Wait for SIGTERM or Ctrl-C (SIGINT), whichever arrives first.
+async fn shutdown_signal() {
+    use tokio::signal;
+
+    let ctrl_c = async {
+        signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
 }
 
 /// Central fallback for unmatched routes — keeps 404s in the same

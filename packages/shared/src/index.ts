@@ -18,4 +18,5 @@ export {
   createRateLimitError,
 } from './errors';
 export type { ErrorCode, ErrorResponse } from './errors';
+export type { ApiError } from './errors';
 export * from './validation-fixtures';

@@ -3,6 +3,11 @@
  * Enforces consistent error message format
  */
 
+// Re-export the canonical API error types from @scavngr/types so consumers
+// can import them from @scavngr/shared without depending on @scavngr/types directly.
+// This consolidates the duplicate definitions (issue #1720).
+export type { ErrorCode as CanonicalErrorCode, ApiError } from '@scavngr/types';
+
 export type ErrorCode =
   | 'AUTH-001'
   | 'AUTH-002'
