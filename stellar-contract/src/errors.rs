@@ -237,23 +237,29 @@ pub enum Error {
     /// Returned by: `verify_material`, `transfer_waste`, `claim_incentive_reward`
     MaterialNotFound = 4001,
 
-    // ── RBAC errors (#704) ────────────────────────────────────────────────────
-    /// (51) The caller does not have the required permission for this operation.
-    /// Returned by: any permission-guarded function
-    PermissionDenied = 51,
+    /// (4002) No incentive record exists for the given ID.
+    /// Returned by: `update_incentive`, `claim_incentive_reward`, `deactivate_incentive`
+    IncentiveNotFound = 4002,
+
+    /// (4003) No participant record exists for the given address.
+    /// Returned by: any function that requires a registered address
+    ParticipantNotFound = 4003,
 
     /// (4004) No carbon listing exists for the given ID.
     /// Returned by: `cancel_carbon_listing`, `purchase_carbon_listing`
     CarbonListingNotFound = 4004,
 
-    // ── Reconciliation errors (#706) ─────────────────────────────────────────
-    /// (53) The waste item has no weight discrepancy to reconcile.
-    /// Returned by: `reconcile_waste`
-    NoDiscrepancy = 53,
+    /// (5000) Integer overflow or underflow detected in arithmetic.
+    /// Returned by: any arithmetic operation that would wrap
+    Overflow = 5000,
 
-    /// (54) The reconciliation adjustment exceeds the allowed threshold.
-    /// Returned by: `reconcile_waste`
-    ReconciliationThresholdExceeded = 54,
+    /// (6000) The charity contract address has not been set.
+    /// Returned by: `donate_to_charity`
+    CharityNotSet = 6000,
+
+    /// (6001) The token contract address has not been set.
+    /// Returned by: `reward_tokens`, `distribute_rewards`
+    TokenAddressNotSet = 6001,
 
     // ── Consolidated subsystem errors (#1097 audit) ──────────────────────────
     //
@@ -263,39 +269,44 @@ pub enum Error {
     // rule #3 above, since neither is a `#[contracterror]` type surfaced to
     // external callers), but new call sites in those subsystems should
     // prefer these shared variants so the crate converges on a single
-    // source of truth over time. No existing numeric codes were renumbered.
-    /// (55) No key has been installed for this purpose yet.
-    KeyRotationNoActiveKey = 55,
-    /// (56) The requested (purpose, version) pair does not exist.
-    KeyRotationVersionNotFound = 56,
-    /// (57) Only the contract admin may rotate or revoke keys.
-    KeyRotationUnauthorized = 57,
-    /// (58) Cannot purge the currently active key version.
-    KeyRotationCannotPurgeActive = 58,
-    /// (59) The supplied key hash is all-zeros (likely an accident).
-    KeyRotationZeroKeyHash = 59,
-    /// (60) A key already exists for this purpose.
-    KeyRotationAlreadyExists = 60,
-    /// (61) No commitment found for this (committer, id) pair.
-    CommitmentNotFound = 61,
-    /// (62) Commitment hash does not match the supplied preimage.
-    CommitmentHashMismatch = 62,
-    /// (63) Commitment has already been consumed.
-    CommitmentAlreadyVerified = 63,
-    /// (64) Commitment has been cancelled.
-    CommitmentCancelled = 64,
-    /// (65) Commitment has expired.
-    CommitmentExpired = 65,
-    /// (66) Commitment is still pending — cannot cancel a verified commitment.
-    CommitmentNotPending = 66,
-    /// (67) A supplied value or payload is malformed.
-    InvalidInput = 67,
-    /// (68) A requested record or resource does not exist.
-    NotFound = 68,
-    /// (69) The resource is in a state that does not permit this operation.
-    InvalidState = 69,
-    /// (70) A ZKP commitment already exists for this (committer, id) pair.
-    CommitmentAlreadyExists = 70,
+    // source of truth over time. Codes have been migrated to domain ranges
+    // (1012–1023 for auth/key-rotation and commitment) to eliminate the
+    // former overlap with legacy sequential codes 51–70 (issue #1722).
+    /// (1012) No key has been installed for this purpose yet.
+    KeyRotationNoActiveKey = 1012,
+    /// (1013) The requested (purpose, version) pair does not exist.
+    KeyRotationVersionNotFound = 1013,
+    /// (1014) Only the contract admin may rotate or revoke keys.
+    KeyRotationUnauthorized = 1014,
+    /// (1015) Cannot purge the currently active key version.
+    KeyRotationCannotPurgeActive = 1015,
+    /// (1016) The supplied key hash is all-zeros (likely an accident).
+    KeyRotationZeroKeyHash = 1016,
+    /// (1017) A key already exists for this purpose.
+    KeyRotationAlreadyExists = 1017,
+    /// (1018) No commitment found for this (committer, id) pair.
+    CommitmentNotFound = 1018,
+    /// (1019) Commitment hash does not match the supplied preimage.
+    CommitmentHashMismatch = 1019,
+    /// (1020) Commitment has already been consumed.
+    CommitmentAlreadyVerified = 1020,
+    /// (1021) Commitment has been cancelled.
+    CommitmentCancelled = 1021,
+    /// (1022) Commitment has expired.
+    CommitmentExpired = 1022,
+    /// (1023) Commitment is still pending — cannot cancel a verified commitment.
+    CommitmentNotPending = 1023,
+    /// (2014) A supplied value or payload is malformed.
+    InvalidInput = 2014,
+    /// (4005) A requested record or resource does not exist.
+    NotFound = 4005,
+    /// (3019) The resource is in a state that does not permit this operation.
+    InvalidState = 3019,
+    /// (3020) A ZKP commitment already exists for this (committer, id) pair.
+    CommitmentAlreadyExists = 3020,
+    /// (3021) The waste types involved in a merge operation do not match.
+    /// Returned by: `merge_wastes`
+    WasteTypeMismatchMerge = 3021,
 }
 
 // ── Issue #760: error categorization and context ──────────────────────────────
@@ -356,6 +367,7 @@ impl Error {
             | Error::WasteAlreadyConfirmed
             | Error::WasteNotConfirmed
             | Error::WasteTypeMismatch
+            | Error::WasteTypeMismatchMerge
             | Error::WasteAlreadyReserved
             | Error::WasteNotReserved
             | Error::WasteReservedByOther
@@ -377,7 +389,8 @@ impl Error {
             | Error::MaterialNotFound
             | Error::IncentiveNotFound
             | Error::ParticipantNotFound
-            | Error::CarbonListingNotFound => ErrorCategory::NotFound,
+            | Error::CarbonListingNotFound
+            | Error::NotFound => ErrorCategory::NotFound,
 
             Error::Overflow => ErrorCategory::Arithmetic,
 
@@ -393,8 +406,6 @@ impl Error {
             | Error::CommitmentCancelled
             | Error::CommitmentExpired
             | Error::CommitmentNotPending => ErrorCategory::Auth,
-
-            Error::NotFound => ErrorCategory::NotFound,
 
             Error::CharityNotSet | Error::TokenAddressNotSet => ErrorCategory::Config,
         }
@@ -435,13 +446,14 @@ impl Error {
             Error::WasteAlreadyConfirmed => "STATE/WASTE_ALREADY_CONFIRMED",
             Error::WasteNotConfirmed => "STATE/WASTE_NOT_CONFIRMED",
             Error::WasteTypeMismatch => "STATE/WASTE_TYPE_MISMATCH",
+            Error::WasteTypeMismatchMerge => "STATE/WASTE_TYPE_MISMATCH_MERGE",
             Error::WasteAlreadyReserved => "STATE/WASTE_ALREADY_RESERVED",
             Error::WasteNotReserved => "STATE/WASTE_NOT_RESERVED",
             Error::WasteReservedByOther => "STATE/WASTE_RESERVED_BY_OTHER",
             Error::WasteExpired => "STATE/WASTE_EXPIRED",
             Error::WasteFrozen => "STATE/WASTE_FROZEN",
             Error::InvalidInput => "INPUT/INVALID_INPUT",
-            Error::NotFound => "NOT_FOUND",
+            Error::NotFound => "NOT_FOUND/GENERIC",
             Error::IncentiveInactive => "STATE/INCENTIVE_INACTIVE",
             Error::MaterialNotVerified => "STATE/MATERIAL_NOT_VERIFIED",
             Error::NoRewardAvailable => "STATE/NO_REWARD_AVAILABLE",
@@ -521,11 +533,13 @@ mod tests {
             Error::LocationMismatch,
             Error::InvalidSchedule,
             Error::InvalidListing,
+            Error::InvalidInput,
             Error::WasteDeactivated,
             Error::WasteAlreadyDeactivated,
             Error::WasteAlreadyConfirmed,
             Error::WasteNotConfirmed,
             Error::WasteTypeMismatch,
+            Error::WasteTypeMismatchMerge,
             Error::WasteAlreadyReserved,
             Error::WasteNotReserved,
             Error::WasteReservedByOther,
@@ -540,82 +554,42 @@ mod tests {
             Error::CarbonListingInactive,
             Error::NoDiscrepancy,
             Error::ReconciliationThresholdExceeded,
+            Error::InvalidState,
+            Error::CommitmentAlreadyExists,
             Error::WasteNotFound,
             Error::MaterialNotFound,
             Error::IncentiveNotFound,
             Error::ParticipantNotFound,
             Error::CarbonListingNotFound,
+            Error::NotFound,
             Error::Overflow,
             Error::CharityNotSet,
             Error::TokenAddressNotSet,
+            Error::KeyRotationNoActiveKey,
+            Error::KeyRotationVersionNotFound,
+            Error::KeyRotationUnauthorized,
+            Error::KeyRotationCannotPurgeActive,
+            Error::KeyRotationZeroKeyHash,
+            Error::KeyRotationAlreadyExists,
+            Error::CommitmentNotFound,
+            Error::CommitmentHashMismatch,
+            Error::CommitmentAlreadyVerified,
+            Error::CommitmentCancelled,
+            Error::CommitmentExpired,
+            Error::CommitmentNotPending,
         ]
     }
 
-    // Check the enum itself, rather than a separate list of expected numbers,
-    // so duplicate discriminants cannot be hidden by a stale test fixture.
+    // Verify that every variant in `all_errors()` has a unique discriminant value.
+    // Using the actual `as u32` cast means duplicates cannot be hidden by a stale fixture.
     #[test]
     fn error_codes_are_unique() {
-        let all: &[(u32, Error)] = &[
-            (1, Error::AlreadyInitialized),
-            (2, Error::Unauthorized),
-            (3, Error::NotRegistered),
-            (4, Error::AlreadyRegistered),
-            (5, Error::NotManufacturer),
-            (6, Error::NotWasteOwner),
-            (7, Error::WasteNotFound),
-            (8, Error::MaterialNotFound),
-            (9, Error::IncentiveNotFound),
-            (10, Error::ParticipantNotFound),
-            (11, Error::InvalidAmount),
-            (12, Error::InvalidWeight),
-            (13, Error::InvalidCoordinates),
-            (14, Error::InvalidPercentage),
-            (15, Error::InsufficientBalance),
-            (16, Error::CharityNotSet),
-            (17, Error::TokenAddressNotSet),
-            (18, Error::WasteDeactivated),
-            (19, Error::WasteAlreadyDeactivated),
-            (20, Error::WasteAlreadyConfirmed),
-            (21, Error::WasteNotConfirmed),
-            (22, Error::SelfConfirmation),
-            (23, Error::IncentiveInactive),
-            (24, Error::MaterialNotVerified),
-            (25, Error::WasteTypeMismatch),
-            (26, Error::NoRewardAvailable),
-            (27, Error::InvalidTransferRoute),
-            (28, Error::SameAddress),
-            (29, Error::Overflow),
-            (30, Error::NotCreator),
-            (31, Error::InsufficientBudget),
-            (32, Error::TooManySplits),
-            (33, Error::WeightMismatch),
-            (34, Error::TooFewSplits),
-            (35, Error::TooFewWastes),
-            (36, Error::TooManyWastes),
-            (37, Error::WasteTypeMismatchMerge),
-            (38, Error::LocationMismatch),
-            (39, Error::WasteAlreadyReserved),
-            (40, Error::WasteNotReserved),
-            (41, Error::NotReserver),
-            (42, Error::WasteReservedByOther),
-            (43, Error::InvalidSchedule),
-            (44, Error::WasteExpired),
-            (45, Error::InsufficientCarbonCredits),
-            (46, Error::CarbonListingNotFound),
-            (47, Error::CarbonListingInactive),
-            (48, Error::NotListingSeller),
-            (49, Error::InvalidListing),
-            (50, Error::WasteFrozen),
-            (51, Error::PermissionDenied),
-            (52, Error::InvalidPermission),
-            (53, Error::NoDiscrepancy),
-            (54, Error::ReconciliationThresholdExceeded),
-        ];
-        let codes: alloc::vec::Vec<u32> = all.iter().map(|(n, _)| *n).collect();
-        let mut sorted = codes.clone();
-        sorted.sort_unstable();
-        sorted.dedup();
-        assert_eq!(codes.len(), sorted.len(), "duplicate numeric error codes detected");
+        let errors = all_errors();
+        let mut codes: alloc::vec::Vec<u32> = errors.iter().map(|e| *e as u32).collect();
+        let original_len = codes.len();
+        codes.sort_unstable();
+        codes.dedup();
+        assert_eq!(original_len, codes.len(), "duplicate numeric error codes detected");
     }
 
     #[test]
