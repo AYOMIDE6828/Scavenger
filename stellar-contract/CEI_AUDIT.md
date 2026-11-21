@@ -95,6 +95,22 @@ test harness/mocks in this repo without adding a new mock-token test contract
 crate; that is recommended as a follow-up so the ordering fix has an executable
 reentrancy proof, not just a static ordering guarantee.
 
+## 3. `require_addresses_different` — compilation bug, fixed ✅ (issue #1729)
+
+**Status: RESOLVED**
+
+`require_addresses_different(from, to)` called
+`validation::validate_addresses_different(&env, from, to, ...)` but `env`
+was not in the function's parameter list, causing a compile-time error.
+The function signature has been updated to `require_addresses_different(env, from, to)`
+and all seven call sites in `lib.rs` have been updated to pass `&env`.
+
+This fix is relevant to the reentrancy story: the self-transfer guard was
+effectively uncompilable, meaning every token-transfer path that called it
+(including `transfer_waste_v2`, `transfer_waste`, `validate_transfer_path`,
+`admin_override_transfer`, `batch_transfer_waste`, `transfer_collected_waste`,
+and `initiate_transfer`) lacked the self-transfer check at compile time.
+
 ## Acceptance criteria status
 
 - [x] Reviewed all functions performing external cross-contract calls
@@ -102,4 +118,5 @@ reentrancy proof, not just a static ordering guarantee.
 - [x] Findings documented (this file)
 - [x] Tests added to verify state ordering (cei_reentrancy_test.rs)
 - [x] Code comments document CEI pattern and reentrancy protection
+- [x] `require_addresses_different` compilation bug fixed (issue #1729)
 - [ ] Full malicious-callee integration test (follow-up, see above)

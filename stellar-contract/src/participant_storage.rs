@@ -73,6 +73,7 @@ pub fn get_or_fail(env: &Env, address: &Address) -> Result<Participant, Error> {
 /// # Parameters
 /// - `env`: The Soroban environment
 /// - `address`: The participant address to delete
+#[cfg(test)]
 pub fn delete_participant(env: &Env, address: &Address) {
     let key = participant_key(env, address);
     env.storage().persistent().remove(&key);
@@ -234,6 +235,7 @@ pub fn get_participant_count(env: &Env) -> u32 {
 /// # Parameters
 /// - `env`: The Soroban environment
 /// - `updates`: Vector of (address, waste_weight, tokens_earned) tuples
+#[cfg(test)]
 pub fn batch_update_stats(
     env: &Env,
     updates: &Vec<(Address, u64, u64)>,
@@ -251,6 +253,7 @@ pub fn batch_update_stats(
 ///
 /// # Returns
 /// `ParticipantInfo` containing public participant data
+#[cfg(test)]
 pub fn to_participant_info(participant: &Participant) -> ParticipantInfo {
     ParticipantInfo {
         address: participant.address.clone(),

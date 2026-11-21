@@ -13,6 +13,7 @@ pub mod reporting;
 pub mod storage;
 pub mod verification;
 pub mod webhook;
+pub mod queue_worker;
 
 // Repository layer modules introduced by the controller/service/repository split (#1697).
 // These are internal additions: they expose data-access abstractions used by the service
@@ -38,3 +39,4 @@ pub use reporting::{ReportService, ReportingService};
 pub use storage::{S3StorageService, StorageService};
 pub use verification::{DefaultVerificationService, VerificationService};
 pub use webhook::{Webhook, WebhookEvent, WebhookManager};
+pub use queue_worker::{Job, QueueWorker};

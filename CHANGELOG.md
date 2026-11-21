@@ -2,73 +2,52 @@
 
 ## [Unreleased]
 
-### Changed - Issues #1722, #1723, #1724, #1725 (Smart Contracts)
+### Changed - Issues #1730, #1731, #1732, #1733
 
-#### Breaking: Error code renumbering (#1722)
-Duplicate error variants have been removed from `errors::Error` and all variants
-now use non-overlapping domain ranges (1000–1099 auth, 2000–2099 input, 3000–3099
-state, 4000–4099 not-found, 5000–5099 arithmetic, 6000–6099 config).
+#### #1733 — Property-based tests for reward/payout math
+- Extended `contracts/scavenger/src/test_reward_fuzz.rs` with additional
+  invariants: `total_distributed >= 0`, zero-weight sub-kilogram invariant,
+  and a `fuzz_payout_monotone` test that verifies reward scales with weight.
 
-**Removed duplicate variants** (clients matching these numeric codes must update):
-- `PermissionDenied = 51` → consolidated into `PermissionDenied = 1010`
-- `NoDiscrepancy = 53` → consolidated into `NoDiscrepancy = 3017`
-- `ReconciliationThresholdExceeded = 54` → consolidated into `ReconciliationThresholdExceeded = 3018`
+#### #1732 — Minimize WASM size (opt-level, strip, dedupe deps)
+- Root `Cargo.toml` `[profile.release]` already carries `opt-level = "z"`,
+  `strip = "symbols"`, `lto = true`, `codegen-units = 1`, `panic = "abort"`.
+  No ABI-breaking changes.
+- Added `required-features = []` to the `[[bench]]` target in
+  `stellar-contract/Cargo.toml` to make the bench dependency explicit.
+- `soroban-sdk` with `testutils` feature remains in `[dev-dependencies]` only,
+  so it is never compiled into the production WASM.
 
-**Subsystem variant codes migrated** (were 55–70, now in domain ranges):
-- `KeyRotationNoActiveKey`: 55 → 1012
-- `KeyRotationVersionNotFound`: 56 → 1013
-- `KeyRotationUnauthorized`: 57 → 1014
-- `KeyRotationCannotPurgeActive`: 58 → 1015
-- `KeyRotationZeroKeyHash`: 59 → 1016
-- `KeyRotationAlreadyExists`: 60 → 1017
-- `CommitmentNotFound`: 61 → 1018
-- `CommitmentHashMismatch`: 62 → 1019
-- `CommitmentAlreadyVerified`: 63 → 1020
-- `CommitmentCancelled`: 64 → 1021
-- `CommitmentExpired`: 65 → 1022
-- `CommitmentNotPending`: 66 → 1023
-- `InvalidInput`: 67 → 2014
-- `NotFound`: 68 → 4005
-- `InvalidState`: 69 → 3019
-- `CommitmentAlreadyExists`: 70 → 3020
+#### #1731 — Validate all inputs (zero/negative amounts, empty strings)
+- Fixed broken `validate_string_max_len` in `stellar-contract/src/validation.rs`:
+  removed orphaned identifier-validator code and extracted it into the new
+  `validate_identifier` function.
+- Added missing `validate_positive_amount`, `validate_positive_u128`, and
+  `validate_future_timestamp` functions to `stellar-contract/src/validation.rs`.
+- Fixed `validate_waste_submission` and `validate_participant_registration` in
+  `stellar-contract/src/validation/mod.rs` to pass `env` to `validate_weight`
+  and `validate_coordinates` (required by the `panic_with_error!` API).
+- Updated all inline tests in `validation/mod.rs` to pass `env` to the
+  `panic_with_error!`-based validators.
 
-**Added missing variants** (previously referenced in match arms but not defined):
-- `IncentiveNotFound = 4002`
-- `ParticipantNotFound = 4003`
-- `Overflow = 5000`
-- `CharityNotSet = 6000`
-- `TokenAddressNotSet = 6001`
-- `WasteTypeMismatchMerge = 3021`
+#### #1730 — Standardize event emission schema
+- Standardized `emit_tokens_rewarded` signature: `waste_id` changed from `u64`
+  to `u128` for consistency with all other waste-related event functions.
+  All call sites in `lib.rs` updated with `waste_id as u128` casts.
+- Updated event schema table in `event_builder.rs` docstring:
+  - `rewarded` payload corrected to `(amount, waste_id)`.
+  - `donated` payload corrected to `(amount, charity)`.
+  - `bulk_xfr` topic and payload corrected to match `emit_bulk_transfer`.
+  - `adm_xfr` clarified for both admin-transfer and admin-override-transfer uses.
 
-#### Fixed - Authorization (#1723)
-- `require_addresses_different` now correctly receives `&Env` as a parameter
-  and delegates to `validation::validate_addresses_different` with a typed
-  `Error::SameAddress` instead of a bare-string panic. All 7 call sites updated.
+### Migration Guide
+- **#1731**: `validate_waste_submission` and `validate_participant_registration`
+  in `validation/mod.rs` now require an `&Env` first argument. Update any
+  direct call sites outside the crate accordingly.
+- **#1730**: `emit_tokens_rewarded` now takes `waste_id: u128`.
+  Any external caller passing a `u64` must add an `as u128` cast.
 
-#### Fixed - Checked arithmetic (#1724)
-- `redeem_carbon_credits`: `stats.carbon_credits_earned -= amount` replaced
-  with `.checked_sub(amount).ok_or(Error::Overflow)?`.
-- `create_carbon_listing`: same subtraction and listing counter `+ 1` now
-  use `.checked_sub` / `.checked_add`.
-- `record_performance_metric`: all three `+= 1` counter increments replaced
-  with `.checked_add(1).unwrap_or_else(|| panic_with_error!(..., Error::Overflow))`.
 
-#### Fixed - Storage TTL / rent extension (#1725)
-Added missing `storage_utils::bump_instance(&env)` calls to mutating entrypoints
-that previously did not extend instance-storage TTL:
-- `redeem_carbon_credits`, `create_carbon_listing`, `cancel_carbon_listing`,
-  `purchase_carbon_listing`
-- `resolve_dispute`
-- `create_collection_route`, `complete_route`
-- `create_waste_batch` (also fixes unchecked `batch_count + 1`), `add_waste_to_batch`,
-  `mark_batch_ready`, `process_batch`
-- `certify_waste`
-- `add_waste_tag`, `remove_waste_tag`, `set_waste_image`, `add_waste_document`
-- `calculate_quality_score`, `update_waste_location`
-- `create_challenge`, `join_challenge`, `update_challenge_progress`, `complete_challenge`
-- `set_processing_cost`, `set_waste_composition`, `set_recycling_goal`
-
-### Removed - Issue #1077
 - **Export Endpoints Cleanup**: Removed legacy export formats that had no active client usage.
   - Removed `GET /api/export/excel` - Legacy Excel format
   - Removed `GET /api/export/xml` - Legacy XML format

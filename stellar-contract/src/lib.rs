@@ -87,6 +87,8 @@ pub mod zkp_verifier;
 pub mod admin;
 /// Transfer workflows: initiate, approve, reject, expire pending transfers.
 pub mod transfer_mgmt;
+/// Charity domain: set_charity_contract, get_charity_contract, donate_to_charity.
+pub mod charity;
 
 // ── Internal test modules (compile-time only) ─────────────────────────────────
 #[cfg(test)]
@@ -158,7 +160,8 @@ const MIN_WEIGHT: Symbol = symbol_short!("MIN_WGT");
 // New feature storage keys
 const CHALLENGE_COUNT: Symbol = symbol_short!("CHAL_CNT");
 const PENDING_XFR_CNT: Symbol = symbol_short!("PXFR_CNT");
-const MILESTONES_KEY: Symbol = symbol_short!("MLSTONES");
+// Note: milestone records are keyed by the string tuple ("milestones", participant)
+// directly in code; no Symbol constant is needed here.
 const AUCTION_COUNT: Symbol = symbol_short!("AUC_CNT");
 
 // Pre-existing missing constants
@@ -611,7 +614,7 @@ impl ScavengerContract {
     /// Prevents self-transfer by ensuring `from` and `to` are different.
     ///
     /// # Panics
-    /// - Panics with `Error::SameAddress` if `from == to`.
+    /// - Panics with `"Self-transfer is not allowed"` if `from == to`.
     fn require_addresses_different(env: &Env, from: &Address, to: &Address) {
         validation::validate_addresses_different(env, from, to, "Self-transfer is not allowed");
     }
@@ -968,7 +971,7 @@ impl ScavengerContract {
         env.storage().instance().set(&TOTAL_TOKENS, &new_total);
 
         // Emit token reward event
-        events::emit_tokens_rewarded(&env, &recipient, amount as u128, waste_id);
+        events::emit_tokens_rewarded(&env, &recipient, amount as u128, waste_id as u128);
 
         // Release lock
         Self::unlock(&env);
@@ -1160,7 +1163,7 @@ impl ScavengerContract {
                         .checked_add(adjusted_share)
                         .unwrap_or_else(|| panic_with_error!(&env, Error::Overflow));
                     Self::update_participant_stats(env, &transfer.to, 0, adjusted_share as u64);
-                    events::emit_tokens_rewarded(env, &transfer.to, adjusted_share, waste_id);
+                    events::emit_tokens_rewarded(env, &transfer.to, adjusted_share, waste_id as u128);
                 }
             }
         }
@@ -1197,9 +1200,9 @@ impl ScavengerContract {
                     // Emit two events to preserve existing behaviour / test expectations
                     let adjusted_owner_share = (owner_share * cert_multiplier * tier_multiplier) / 10000;
                     let adjusted_recycler_amount = (recycler_amount * cert_multiplier * tier_multiplier) / 10000;
-                    events::emit_tokens_rewarded(env, &material.submitter, adjusted_owner_share, waste_id);
+                    events::emit_tokens_rewarded(env, &material.submitter, adjusted_owner_share, waste_id as u128);
                     if adjusted_recycler_amount > 0 {
-                        events::emit_tokens_rewarded(env, &material.submitter, adjusted_recycler_amount, waste_id);
+                        events::emit_tokens_rewarded(env, &material.submitter, adjusted_recycler_amount, waste_id as u128);
                     }
                 }
             }
@@ -5188,7 +5191,7 @@ impl ScavengerContract {
                 if p.role.can_collect_materials() && !p.role.can_manufacture() {
                     token_client.transfer(&manufacturer, &transfer.to, &collector_share);
                     Self::update_participant_stats(&env, &transfer.to, 0, collector_share as u64);
-                    events::emit_tokens_rewarded(&env, &transfer.to, collector_share as u128, waste_id);
+                    events::emit_tokens_rewarded(&env, &transfer.to, collector_share as u128, waste_id as u128);
                     total_distributed += collector_share;
                 }
             }
@@ -5196,14 +5199,14 @@ impl ScavengerContract {
 
         token_client.transfer(&manufacturer, &material.submitter, &owner_share);
         Self::update_participant_stats(&env, &material.submitter, 0, owner_share as u64);
-        events::emit_tokens_rewarded(&env, &material.submitter, owner_share as u128, waste_id);
+        events::emit_tokens_rewarded(&env, &material.submitter, owner_share as u128, waste_id as u128);
         total_distributed += owner_share;
 
         let recycler_amount = total_reward - total_distributed;
         if recycler_amount > 0 {
             token_client.transfer(&manufacturer, &material.submitter, &recycler_amount);
             Self::update_participant_stats(&env, &material.submitter, 0, recycler_amount as u64);
-            events::emit_tokens_rewarded(&env, &material.submitter, recycler_amount as u128, waste_id);
+            events::emit_tokens_rewarded(&env, &material.submitter, recycler_amount as u128, waste_id as u128);
         }
 
         total_reward
