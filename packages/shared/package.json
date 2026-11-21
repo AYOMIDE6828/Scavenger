@@ -19,5 +19,8 @@
     "build": "tsc",
     "lint": "eslint src --ext .ts"
   },
+  "dependencies": {
+    "@scavngr/types": "workspace:*"
+  },
   "license": "MIT"
 }

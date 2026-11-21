@@ -389,4 +389,27 @@ mod tests {
         assert!(entry.is_expired(Duration::from_secs(100)));
         assert!(!entry.is_expired(Duration::from_secs(300)));
     }
+
+    #[actix_web::test]
+    async fn key_too_long_returns_400() {
+        let counter = Arc::new(AtomicU32::new(0));
+        let c = counter.clone();
+        let app = test::init_service(
+            App::new()
+                .wrap(IdempotencyMiddleware::new())
+                .app_data(web::Data::new(c))
+                .route("/test", web::post().to(counter_handler)),
+        )
+        .await;
+
+        let long_key = "x".repeat(MAX_KEY_LEN + 1);
+        let req = test::TestRequest::post()
+            .uri("/test")
+            .insert_header((IDEMPOTENCY_KEY_HEADER, long_key.as_str()))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        // Handler must NOT have been called
+        assert_eq!(counter.load(Ordering::SeqCst), 0);
+    }
 }
